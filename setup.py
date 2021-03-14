@@ -14,7 +14,7 @@ def find_value(name):
 
 setup(
     name                = find_value('title'),
-    version             = find_value('version'),
+    use_scm_version     = True,
     description         = find_value('description'),
     long_description    = read('README.rst'),
     url                 = find_value('url'),
@@ -41,11 +41,14 @@ setup(
             'uvloop >= 0.13.0'
         ],
         'sshtunnel': [
-            'asyncssh >= 1.16.0',
+            'asyncssh >= 2.5.0',
+        ],
+        'quic': [
+            'aioquic >= 0.9.7',
         ],
         'daemon': [
             'python-daemon >= 2.2.3',
-        ]
+        ],
     },
     install_requires    = [],
     entry_points        = {

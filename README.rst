@@ -1,7 +1,7 @@
 python-proxy
 ============
 
-|made-with-python| |PyPI-version| |Hit-Count| |Downloads|
+|made-with-python| |PyPI-version| |Hit-Count| |Downloads| |Downloads-month| |Downloads-week|
 
 .. |made-with-python| image:: https://img.shields.io/badge/Made%20with-Python-1f425f.svg
    :target: https://www.python.org/
@@ -11,8 +11,12 @@ python-proxy
    :target: https://pypi.python.org/pypi/pproxy/
 .. |Downloads| image:: https://pepy.tech/badge/pproxy
    :target: https://pepy.tech/project/pproxy
+.. |Downloads-month| image:: https://pepy.tech/badge/pproxy/month
+   :target: https://pepy.tech/project/pproxy
+.. |Downloads-week| image:: https://pepy.tech/badge/pproxy/week
+   :target: https://pepy.tech/project/pproxy
 
-HTTP/Socks4/Socks5/Shadowsocks/ShadowsocksR/SSH/Redirect/Pf TCP/UDP asynchronous tunnel proxy implemented in Python3 asyncio.
+HTTP/HTTP2/HTTP3/Socks4/Socks5/Shadowsocks/SSH/Redirect/Pf/QUIC TCP/UDP asynchronous tunnel proxy implemented in Python3 asyncio.
 
 QuickStart
 ----------
@@ -73,8 +77,9 @@ Features
 - Proxy client/server for TCP/UDP.
 - Schedule (load balance) among remote servers.
 - Incoming traffic auto-detect.
-- Tunnel/relay/backward-relay support.
+- Tunnel/jump/backward-jump support.
 - Unix domain socket support.
+- HTTP v2, HTTP v3 (QUIC)
 - User/password authentication support.
 - Filter/block hostname by regex patterns.
 - SSL/TLS client/server support.
@@ -98,6 +103,10 @@ Protocols
 | http              |            | ✔          |            |            | httponly://  |
 | (get,post,etc)    |            |            |            |            | (as client)  |
 +-------------------+------------+------------+------------+------------+--------------+
+| http v2 (connect) | ✔          | ✔          |            |            | h2://        |
++-------------------+------------+------------+------------+------------+--------------+
+| http v3 (connect) | ✔ by UDP   | ✔ by UDP   |            |            | h3://        |
++-------------------+------------+------------+------------+------------+--------------+
 | https             | ✔          | ✔          |            |            | http+ssl://  |
 +-------------------+------------+------------+------------+------------+--------------+
 | socks4            | ✔          | ✔          |            |            | socks4://    |
@@ -112,7 +121,11 @@ Protocols
 +-------------------+------------+------------+------------+------------+--------------+
 | shadowsocksR      | ✔          | ✔          |            |            | ssr://       |
 +-------------------+------------+------------+------------+------------+--------------+
+| trojan            | ✔          | ✔          |            |            | trojan://    |
++-------------------+------------+------------+------------+------------+--------------+
 | ssh tunnel        |            | ✔          |            |            | ssh://       |
++-------------------+------------+------------+------------+------------+--------------+
+| quic              | ✔ by UDP   | ✔ by UDP   | ✔          | ✔          | http+quic:// |
 +-------------------+------------+------------+------------+------------+--------------+
 | iptables nat      | ✔          |            |            |            | redir://     |
 +-------------------+------------+------------+------------+------------+--------------+
@@ -230,6 +243,8 @@ URI Syntax
     +----------+-----------------------------+
     | ssr      | shadowsocksr (SSR) protocol |
     +----------+-----------------------------+
+    | trojan   | trojan_ protocol            |
+    +----------+-----------------------------+
     | ssh      | ssh client tunnel           |
     +----------+-----------------------------+
     | redir    | redirect (iptables nat)     |
@@ -248,6 +263,8 @@ URI Syntax
     +----------+-----------------------------+
     | direct   | direct connection           |
     +----------+-----------------------------+
+
+.. _trojan: https://trojan-gfw.github.io/trojan/protocol
 
   - "http://" accepts GET/POST/CONNECT as server, sends CONNECT as client. "httponly://" sends "GET/POST" as client, works only on http traffic.
 
@@ -360,7 +377,7 @@ URI Syntax
 
   - The username, colon ':', and the password
 
-URIs can be joined by "__" to indicate tunneling by relay. For example, ss://1.2.3.4:1324__http://4.5.6.7:4321 make remote connection to the first shadowsocks proxy server, and then tunnel to the second http proxy server.
+URIs can be joined by "__" to indicate tunneling by jump. For example, ss://1.2.3.4:1324__http://4.5.6.7:4321 make remote connection to the first shadowsocks proxy server, and then jump to the second http proxy server.
 
 .. _AEAD: http://shadowsocks.org/en/spec/AEAD-Ciphers.html
 
@@ -553,9 +570,7 @@ Examples
 
   Make sure **pproxy** runs in root mode (sudo), otherwise it cannot redirect pf packet.
 
-- Relay tunnel
-
-  Relay tunnel example:
+- Multiple jumps example
 
   .. code:: rst
 
@@ -653,6 +668,12 @@ Examples
 
   Server connects to client_ip:8081 and waits for client proxy requests. The protocol http specified is just an example. It can be any protocol and cipher **pproxy** supports. The scheme "**in**" should exist in URI to inform **pproxy** that it is a backward proxy.
 
+  .. code:: rst
+
+    $ pproxy -l http+in://jumpserver__http://client_ip:8081
+
+  It is a complicated example. Server connects to client_ip:8081 by jump http://jumpserver. The backward proxy works through jumps.
+
 - SSH client tunnel
 
   SSH client tunnel support is enabled by installing additional library asyncssh_. After "pip3 install asyncssh", you can specify "**ssh**" as scheme to proxy via ssh client tunnel.
@@ -669,10 +690,73 @@ Examples
 
   SSH connection known_hosts feature is disabled by default.
 
+- SSH jump
+
+  SSH jump is supported by using "__" concatenation
+
+  .. code:: rst
+
+    $ pproxy -r ssh://server1__ssh://server2__ssh://server3
+
+  First connection to server1 is made. Second, ssh connection to server2 is made from server1. Finally, connect to server3, and use server3 for proxying traffic.
+
+- SSH remote forward
+
+  .. code:: rst
+
+    $ pproxy -l ssh://server__tunnel://0.0.0.0:1234 -r tunnel://127.0.0.1:1234
+
+  TCP :1234 on remote server is forwarded to 127.0.0.1:1234 on local server
+
+  .. code:: rst
+
+    $ pproxy -l ssh://server1__ssh://server2__ss://0.0.0.0:1234 -r ss://server3:1234
+
+  It is a complicated example. SSH server2 is jumped from SSH server1, and ss://0.0.0.0:1234 on server2 is listened. Traffic is forwarded to ss://server3:1234.
+
+- Trojan protocol example
+
+  Normally trojan:// should be used together with ssl://. You should specify the SSL crt/key file for ssl usage. A typical trojan server would be:
+
+  .. code:: rst
+
+    $ pproxy --ssl ssl.crt,ssl.key -l trojan+tunnel{localhost:80}+ssl://:443#yourpassword -vv
+
+  If trojan password doesn't match, the tunnal{localhost:80} will be switched to. It looks exactly the same as a common HTTPS website.
+
+- QUIC protocol example
+
+  QUIC is a UDP stream protocol used in HTTP/3. Library **aioquic** is required if you want to proxy via QUIC.
+  QUIC is listened on UDP port, but can handle TCP or UDP traffic. If you want to handle TCP traffic, you should use "-l quic+http" instead of "-ul quic+http".
+
+  .. code:: rst
+
+    $ pip3 install aioquic
+    $ pproxy --ssl ssl.crt,ssl.key -l quic+http://:1234
+
+  On the client:
+
+    $ pproxy -r quic+http://server:1234
+
+  QUIC protocol can transfer a lot of TCP streams on one single UDP stream. If the connection number is hugh, QUIC can benefit by reducing TCP handshake time.
+
+- VPN Server Example
+
+  You can run VPN server simply by installing pvpn (python vpn), a lightweight VPN server with pproxy tunnel feature.
+
+  .. code:: rst
+
+    $ pip3 install pvpn
+    Successfully installed pvpn-0.2.1
+    $ pvpn -wg 9999 -r http://remote_server:remote_port
+    Serving on UDP :500 :4500...
+    Serving on UDP :9000 (WIREGUARD)...
+    TCP xx.xx.xx.xx:xx -> HTTP xx.xx.xx.xx:xx -> xx.xx.xx.xx:xx
+
 
 Projects
 --------
 
-+ `python-esp <https://github.com/qwj/python-esp>`_ - Pure python VPN (IPSec,IKE,IKEv2,L2TP)
-+ `shadowproxy <https://github.com/guyingbo/shadowproxy>`_ - Another awesome proxy implementation by guyingbo
++ `python-vpn <https://github.com/qwj/python-vpn>`_ - VPN Server (IPSec,IKE,IKEv2,L2TP,WireGuard) in pure python
++ `shadowproxy <https://github.com/guyingbo/shadowproxy>`_ - Awesome python proxy implementation by guyingbo
 
