@@ -883,14 +883,20 @@ async def test_url(url, rserver):
     print(f'============ success ============')
 
 def print_server_started(option, server, print_fn):
-    for s in server.sockets:
+    sockets=[]
+    if hasattr(server, 'sockets'): # asyncio.Server or uvloop.loop.Server
+        sockets.extend(server.sockets)
+    elif hasattr(server, '_transport'): # aioquic.asyncio.server.QuicServer
+        sockets.append(server._transport.get_extra_info('socket'))
+    for s in sockets:
         # https://github.com/MagicStack/uvloop/blob/master/uvloop/pseudosock.pyx
-        laddr = s.getsockname() # tuple size varies with protocol family
-        h = laddr[0]
-        p = laddr[1]
-        f = str(s.family)
-        ipversion = "ipv4" if f == "AddressFamily.AF_INET" else ("ipv6" if f == "AddressFamily.AF_INET6" else "ipv?") # TODO better
-        bind = ipversion+' '+h+':'+str(p)
+        host, port = s.getsockname() # tuple size varies with protocol family
+        ipversion = "ipv?"
+        if s.family == socket.AddressFamily.AF_INET:
+            ipversion = "ipv4"
+        elif s.family == socket.AddressFamily.AF_INET6:
+            ipversion = "ipv6"
+        bind = ipversion + ' ' + host + ':' + str(port)
         print_fn(option, bind)
 
 def main(args = None):
