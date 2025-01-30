@@ -886,8 +886,13 @@ def print_server_started(option, server, print_fn):
     sockets=[]
     if hasattr(server, 'sockets'): # asyncio.Server or uvloop.loop.Server
         sockets.extend(server.sockets)
+    elif hasattr(server, 'get_extra_info'): # asyncio.Transport or uvloop.loop.UDPTransport
+        sockets.append(server.get_extra_info('socket'))
     elif hasattr(server, '_transport'): # aioquic.asyncio.server.QuicServer
         sockets.append(server._transport.get_extra_info('socket'))
+    else:
+        print_fn(option, None)
+        return
     for s in sockets:
         # https://github.com/MagicStack/uvloop/blob/master/uvloop/pseudosock.pyx
         host, port = s.getsockname() # tuple size varies with protocol family
