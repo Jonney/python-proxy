@@ -895,7 +895,7 @@ def print_server_started(option, server, print_fn):
         return
     for s in sockets:
         # https://github.com/MagicStack/uvloop/blob/master/uvloop/pseudosock.pyx
-        host, port = s.getsockname() # tuple size varies with protocol family
+        host, port = s.getsockname()[:2] # tuple size varies with protocol family
         ipversion = "ipv?"
         if s.family == socket.AddressFamily.AF_INET:
             ipversion = "ipv4"
